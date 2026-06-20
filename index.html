@@ -695,6 +695,39 @@
     }
   };
 
+  // Plugin: draw "X%" inside each donut arc at its radial midpoint
+  const segmentLabelsPlugin = {
+    id: 'segmentLabels',
+    afterDraw(chart) {
+      const opts = chart.config.options.plugins.segmentLabels;
+      if (!opts || !opts.enabled) return;
+      const meta = chart.getDatasetMeta(0);
+      const data = chart.data.datasets[0].data;
+      const total = data.reduce((s, v) => s + (v || 0), 0);
+      if (total === 0) return;
+      const colors = opts.textColors || [];
+      const minPct = opts.minPct != null ? opts.minPct : 6;
+      const fontSize = opts.fontSize || 10;
+      const ctx = chart.ctx;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `700 ${fontSize}px -apple-system, BlinkMacSystemFont, system-ui, sans-serif`;
+      meta.data.forEach((arc, i) => {
+        const value = data[i];
+        const pct = Math.round((value / total) * 100);
+        if (pct < minPct) return;
+        const midAngle = (arc.startAngle + arc.endAngle) / 2;
+        const radius = (arc.innerRadius + arc.outerRadius) / 2;
+        const x = arc.x + Math.cos(midAngle) * radius;
+        const y = arc.y + Math.sin(midAngle) * radius;
+        ctx.fillStyle = colors[i] || '#000000';
+        ctx.fillText(`${pct}%`, x, y);
+      });
+      ctx.restore();
+    }
+  };
+
   // Upload handling
   const uploadZone = document.getElementById('upload-zone');
   const fileInput  = document.getElementById('file-input');
@@ -747,6 +780,37 @@
     reader.onerror = () => setMsg('Failed to read file.', 'err');
     reader.readAsArrayBuffer(file);
   }
+
+  // Auto-load the Excel file sitting next to this HTML (for GitHub Pages deployment)
+  async function autoLoadFromSameFolder(){
+    const filename = 'Program_Execution_Plan.xlsx';
+    setMsg(`Loading ${filename}…`, '');
+    try {
+      const res = await fetch(filename, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const buf = await res.arrayBuffer();
+      const data = new Uint8Array(buf);
+      const wb = XLSX.read(data, { type: 'array', cellDates: true });
+      const parsed = parseWorkbook(wb);
+      if (!parsed.length) {
+        setMsg('No tracks detected in the file. Check the sheet name and structure.', 'err');
+        return;
+      }
+      tracks = parsed;
+      const total = parsed.reduce((s,t)=>s+t.total,0);
+      setMsg(`Loaded ${parsed.length} tracks · ${total} total tasks (auto-loaded)`, 'ok');
+      document.getElementById('header-status').textContent = `${filename} · ${parsed.length} tracks · ${total} tasks`;
+      reloadBtn.style.display = 'inline-block';
+      renderDashboard();
+    } catch (err) {
+      // Auto-load failed — fall back silently to manual browse. Most common reasons:
+      // (a) file:// double-click (CORS blocks fetch), (b) file not yet committed to repo.
+      console.warn('Auto-load failed:', err);
+      setMsg('Click Browse to load your tracker file.', '');
+    }
+  }
+  // Kick off auto-load after script setup completes
+  autoLoadFromSameFolder();
 
   function normalizeStatus(s){
     if (s == null) return 'Not Started';
@@ -910,23 +974,29 @@
         datasets: [{
           data: [done, ip, ns],
           backgroundColor: [COLOR_DONE, COLOR_IP, COLOR_NS],
-          borderColor: '#ffffff',
-          borderWidth: 2
+          borderColor: 'rgba(255,255,255,0.2)',
+          borderWidth: 1
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: '65%',
+        cutout: '60%',
         plugins: {
           legend: { display: false },
           tooltip: {
             callbacks: { label: (c) => `${c.label}: ${c.parsed} (${tot ? Math.round(c.parsed/tot*100) : 0}%)` }
           },
-          centerText: { total: tot, size: 22, numColor: '#ffffff', labelColor: 'rgba(255,255,255,0.75)' }
+          centerText: { total: tot, size: 22, numColor: '#ffffff', labelColor: 'rgba(255,255,255,0.75)' },
+          segmentLabels: {
+            enabled: true,
+            fontSize: 10,
+            minPct: 6,
+            textColors: ['#ffffff', '#5A4400', '#0C447C']
+          }
         }
       },
-      plugins: [centerTextPlugin]
+      plugins: [centerTextPlugin, segmentLabelsPlugin]
     });
 
     // Build drill-down content: all tasks grouped by status (Completed → In Progress → Not Started)
