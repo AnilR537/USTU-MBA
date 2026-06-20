@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIS Review Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #F7F8FA;
+    --card: #FFFFFF;
+    --border: #E5E7EB;
+    --border-strong: #D1D5DB;
+    --text: #111827;
+    --text-secondary: #6B7280;
+    --text-tertiary: #9CA3AF;
+    --bg-secondary: #F3F4F6;
+    --navy: #042C53;
+    --navy-2: #0C447C;
+    --green: #2E7D32;
+    --green-bg: #E8F5E9;
+    --green-fg: #1B5E20;
+    --yellow: #F4C430;
+    --yellow-bg: #FFF8E1;
+    --yellow-fg: #7A5A00;
+    --blue: #9DC3E6;
+    --blue-bg: #E6F1FB;
+    --blue-fg: #0C447C;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 24px;
+    line-height: 1.45;
+  }
+  .container { max-width: 1280px; margin: 0 auto; }
+  .header {
+    background: linear-gradient(135deg, #020F1F 0%, #061B33 100%);
+    border-radius: var(--radius-lg);
+    padding: 14px 20px;
+    margin-bottom: 16px;
+    color: #ffffff;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 12px;
+    z-index: 100;
+    box-shadow: 0 4px 16px rgba(2, 15, 31, 0.25);
+  }
+  .header h1 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.25; color: #ffffff; }
+  .header h1 .accent { color: #378ADD; font-weight: 700; }
+  .header p  { margin: 4px 0 0; font-size: 12px; color: rgba(255,255,255,0.85); }
+  .header-status { font-size: 12px; color: rgba(255,255,255,0.75); }
+
+
+  .btn {
+    padding: 6px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    background: var(--navy);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+  }
+  .btn:hover { background: var(--navy-2); }
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+  }
+  .btn-secondary:hover { background: var(--bg-secondary); }
+  .upload-zone {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 8px 14px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .upload-actions { display: flex; gap: 6px; align-items: center; }
+  .upload-msg { font-size: 12px; color: var(--text-secondary); margin: 0; flex: 1; min-width: 200px; }
+  .upload-msg.ok  { color: var(--green-fg); font-weight: 500; }
+  .upload-msg.err { color: #B00020; }
+  details { font-size: 11px; color: var(--text-secondary); flex-basis: 100%; }
+  details summary { cursor: pointer; }
+  details > div { padding: 6px 0 0; line-height: 1.5; max-width: 720px; }
+
+  .legend {
+    display: none;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .legend.visible { display: flex; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+
+  /* Overview hero: navy banner with donut on left, hero text on right; click to drill into all-tasks view */
+  .overview-card {
+    display: none;
+    margin-bottom: 16px;
+    flex-direction: column;
+    transition: box-shadow 0.15s ease;
+  }
+  .overview-card.visible { display: flex; }
+  .overview-summary {
+    background: linear-gradient(to right, #042C53 0%, #0C447C 100%);
+    color: #ffffff;
+    border-radius: var(--radius-md);
+    padding: 18px 24px;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    cursor: pointer;
+    user-select: none;
+    transition: filter 0.15s ease;
+    position: relative;
+  }
+  .overview-summary:hover { filter: brightness(1.06); }
+  .overview-card.expanded .overview-summary {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+  .overview-chevron {
+    position: absolute;
+    top: 14px;
+    right: 18px;
+    font-size: 14px;
+    color: rgba(255,255,255,0.7);
+    transition: transform 0.2s ease;
+  }
+  .overview-card.expanded .overview-chevron { transform: rotate(90deg); color: #ffffff; }
+  .overview-donut-wrap {
+    position: relative;
+    width: 130px;
+    height: 130px;
+    flex-shrink: 0;
+  }
+  .overview-text {
+    flex: 1;
+    min-width: 0;
+  }
+  .overview-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    color: rgba(255,255,255,0.75);
+    text-transform: uppercase;
+  }
+  .overview-headline {
+    font-size: 42px;
+    font-weight: 700;
+    line-height: 1;
+    margin-top: 4px;
+  }
+  .overview-headline-suffix {
+    font-size: 17px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.85);
+    margin-left: 6px;
+  }
+  .overview-subline {
+    font-size: 12.5px;
+    color: rgba(255,255,255,0.85);
+    margin-top: 8px;
+  }
+
+  /* Drill-down details (all tasks grouped by status) */
+  .overview-details {
+    display: none;
+    padding: 16px 22px 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-bottom-left-radius: var(--radius-md);
+    border-bottom-right-radius: var(--radius-md);
+  }
+  .overview-card.expanded .overview-details { display: block; }
+  .task-group { margin-bottom: 18px; }
+  .task-group:last-child { margin-bottom: 0; }
+  .task-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .task-group-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .task-group-count {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.6);
+  }
+  .task-group-list {
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    background: var(--card);
+    overflow: hidden;
+  }
+  .task-list-header,
+  .task-list-row {
+    display: grid;
+    grid-template-columns: 1fr 110px 140px;
+    gap: 14px;
+    padding: 10px 14px;
+    align-items: center;
+    font-size: 12.5px;
+  }
+  .task-list-header {
+    background: #F9FAFB;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    padding: 8px 14px;
+  }
+  .task-list-row + .task-list-row,
+  .task-list-header + .task-list-row {
+    border-top: 1px solid var(--border);
+  }
+  .task-list-name { line-height: 1.4; }
+  .task-list-context { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+  .task-list-meta { font-size: 11.5px; color: var(--text-secondary); }
+  @media (max-width: 768px) {
+    .task-list-header,
+    .task-list-row { grid-template-columns: 1fr 90px 120px; gap: 10px; font-size: 12px; }
+  }
+  @media (max-width: 640px) {
+    .overview-summary { flex-direction: column; align-items: stretch; text-align: center; }
+    .overview-text { width: 100%; }
+    .task-list-header { display: none; }
+    .task-list-row { grid-template-columns: 1fr; gap: 4px; }
+  }
+
+  /* Three readiness pillar cards (RAG-themed by editorial assignment) */
+  .readiness-row {
+    display: none;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .readiness-row.visible { display: grid; }
+  .readiness-card {
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: #ffffff;
+    border: 1px solid var(--border);
+  }
+  .readiness-card.rag-green {
+    border: 1px solid #BBF7D0;
+    border-left: 4px solid #2E7D32;
+  }
+  .readiness-card.rag-amber {
+    border: 1px solid #FDE68A;
+    border-left: 4px solid #B45309;
+  }
+  .readiness-card.rag-red {
+    border: 1px solid #FECACA;
+    border-left: 4px solid #B91C1C;
+  }
+  .readiness-title {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    line-height: 1.3;
+  }
+  .readiness-pct {
+    font-size: 32px;
+    font-weight: 700;
+    margin-top: 6px;
+    line-height: 1;
+  }
+  .rag-green .readiness-pct { color: #2E7D32; }
+  .rag-amber .readiness-pct { color: #B45309; }
+  .rag-red   .readiness-pct { color: #B91C1C; }
+  .readiness-bar-track {
+    height: 6px;
+    border-radius: 999px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .rag-green .readiness-bar-track { background: #E8F5E9; }
+  .rag-amber .readiness-bar-track { background: #FEF3C7; }
+  .rag-red   .readiness-bar-track { background: #FEE2E2; }
+  .readiness-bar-fill {
+    height: 100%;
+    transition: width 0.4s ease;
+  }
+  .rag-green .readiness-bar-fill { background: #2E7D32; }
+  .rag-amber .readiness-bar-fill { background: #B45309; }
+  .rag-red   .readiness-bar-fill { background: #B91C1C; }
+  .readiness-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+  }
+  @media (max-width: 900px) {
+    .readiness-row.visible { grid-template-columns: 1fr; }
+  }
+
+  .donut-grid {
+    display: block;
+  }
+  .workstream { margin-bottom: 14px; }
+  .workstream-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px 10px 12px;
+    background: linear-gradient(to right, #374151 0%, #2A323F 100%);
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
+    color: #ffffff;
+    margin-bottom: 0;
+    flex-wrap: wrap;
+    cursor: pointer;
+    user-select: none;
+    transition: filter 0.15s ease, background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
+  .workstream-header:hover { filter: brightness(1.08); }
+  .workstream.expanded .workstream-header {
+    background: #E5E7EB;
+    color: var(--navy);
+    border-color: var(--navy);
+    filter: none;
+  }
+  .workstream.expanded .workstream-header:hover {
+    background: #D9DCE2;
+    filter: none;
+  }
+  .workstream.expanded .workstream-label {
+    color: #5F5E5A;
+    opacity: 1;
+  }
+  .workstream.expanded .ws-stat {
+    background: #E6F1FB;
+    color: var(--navy);
+  }
+  .workstream.expanded .ws-stat-pct {
+    border: 1px solid #B5D4F4;
+    box-shadow: none;
+  }
+  .workstream-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .workstream-toggle {
+    display: inline-block;
+    font-size: 11px;
+    line-height: 1;
+    transition: transform 0.2s ease;
+    transform: rotate(0deg);
+    width: 12px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .workstream.expanded .workstream-toggle { transform: rotate(90deg); }
+  .workstream-name {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+    transition: font-size 0.15s ease;
+  }
+  .workstream.expanded .workstream-name {
+    font-size: 17px;
+  }
+  .workstream-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    opacity: 0.75;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .workstream-stats {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .ws-stat {
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.15);
+    color: #ffffff;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .ws-stat-pct {
+    background: #EEF1F5;
+    color: var(--navy);
+    font-weight: 700;
+    min-width: 92px;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.4);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+  }
+  /* Expanded state: pill's unfilled portion uses light-blue to remain visible on white header */
+  .workstream.expanded .ws-stat-pct[data-pct] {
+    background: linear-gradient(to right, #2E7D32 var(--pct, 0%), #E6F1FB var(--pct, 0%)) !important;
+  }
+  .ws-stat-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .workstream-tracks {
+    display: none;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 12px;
+  }
+  .workstream.expanded .workstream-tracks { display: grid; }
+  .grid-toolbar {
+    display: none;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .grid-toolbar.visible { display: flex; }
+  .toolbar-link {
+    font-size: 12px;
+    color: var(--navy-2);
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--card);
+    user-select: none;
+    transition: background 0.15s ease;
+  }
+  .toolbar-link:hover { background: var(--bg-secondary); }
+  @media (max-width: 1100px) { .workstream.expanded .workstream-tracks { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 640px)  { .workstream.expanded .workstream-tracks { grid-template-columns: 1fr; } }
+
+  .track-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 14px;
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    position: relative;
+  }
+  .track-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-strong);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+  }
+  .track-label { font-size: 11px; color: var(--text-secondary); font-weight: 500; letter-spacing: 0.5px; margin-bottom: 2px; }
+  .track-name { font-size: 13px; font-weight: 500; line-height: 1.3; min-height: 34px; margin-bottom: 8px; padding-right: 24px; }
+  .track-arrow { position: absolute; top: 12px; right: 12px; font-size: 14px; color: var(--text-tertiary); }
+  .donut-wrap { position: relative; width: 100%; height: 150px; }
+  .track-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 6px;
+    font-size: 11px;
+  }
+  .track-footer-counts { color: var(--text-secondary); }
+  .track-footer-pct    { color: var(--green); font-weight: 600; }
+
+  /* Expanded view */
+  .expanded-view { display: none; }
+  .back-btn {
+    margin-bottom: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    background: var(--card);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: inherit;
+  }
+  .back-btn:hover { background: var(--bg-secondary); }
+  .exp-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+  }
+  .exp-header { margin-bottom: 20px; }
+  .exp-header-label { font-size: 11px; color: var(--text-secondary); font-weight: 500; letter-spacing: 0.5px; }
+  .exp-header-title { font-size: 22px; font-weight: 600; margin-top: 2px; }
+  .exp-header-sub { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+  .exp-top { display: grid; grid-template-columns: 260px 1fr; gap: 24px; margin-bottom: 24px; align-items: center; }
+  @media (max-width: 768px) { .exp-top { grid-template-columns: 1fr; } }
+  .exp-donut-wrap { position: relative; width: 100%; height: 240px; }
+  .exp-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .exp-kpi { border-radius: var(--radius-md); padding: 14px; }
+  .exp-kpi-label { font-size: 11px; font-weight: 500; letter-spacing: 0.5px; }
+  .exp-kpi-value { font-size: 26px; font-weight: 600; margin-top: 2px; }
+  .kpi-pct { font-size: 14px; opacity: 0.7; margin-left: 8px; font-weight: 400; }
+
+  .section-label {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .task-table { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+  .task-row {
+    display: grid;
+    grid-template-columns: 1fr 130px 110px 140px;
+    gap: 12px;
+    padding: 12px 14px;
+    align-items: center;
+    font-size: 13px;
+  }
+  .task-row + .task-row { border-top: 1px solid var(--border); }
+  .task-row.header {
+    background: var(--bg-secondary);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+    padding: 10px 14px;
+  }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .text-muted { font-size: 12px; color: var(--text-secondary); }
+
+  @media (max-width: 640px) {
+    .task-row { grid-template-columns: 1fr; gap: 4px; }
+    .task-row.header { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div>
+      <h1><span class="accent">USTU</span> MBA in Collaboration with <span class="accent">KPMG</span> in India</h1>
+      <p>MIS Review Dashboard</p>
+    </div>
+    <div id="header-status" class="header-status">No data loaded</div>
+  </div>
+
+  <div id="upload-zone" class="upload-zone">
+    <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;">
+    <div class="upload-actions">
+      <button id="browse-btn" class="btn">Browse</button>
+      <button id="reload-btn" class="btn btn-secondary" style="display:none;">Replace file</button>
+    </div>
+    <div id="upload-msg" class="upload-msg"></div>
+    <details>
+      <summary>Expected file structure</summary>
+      <div>
+        Sheet named <strong>Program</strong>. <strong>Column A</strong> = Workstream name (set on first track row of each workstream; carries forward). <strong>Column B</strong> = Track index within workstream. <strong>Column C</strong> = Track / Task name. <strong>Column D</strong> = IP+AI Product flag (becomes 11th workstream). <strong>Column E</strong> = Responsibility / Owner. <strong>Column G</strong> = ECD (date). <strong>Column H</strong> = Status (Completed / In Progress / blank = Not Started). Tasks inherit ECD from their track header when their own ECD cell is blank.
+      </div>
+    </details>
+  </div>
+
+  <div id="overview-card" class="overview-card">
+    <div class="overview-summary" id="overview-summary" role="button" tabindex="0" aria-expanded="false">
+      <div class="overview-donut-wrap">
+        <canvas id="overview-donut" role="img" aria-label="Overall task status breakdown"></canvas>
+      </div>
+      <div class="overview-text">
+        <div class="overview-eyebrow">Overall Program Status</div>
+        <div class="overview-headline"><span id="overview-pct-num">0%</span> <span class="overview-headline-suffix">complete</span></div>
+        <div class="overview-subline" id="overview-subline">0 done · 0 in progress · 0 not started · 0 total</div>
+      </div>
+      <span class="overview-chevron" aria-hidden="true">▸</span>
+    </div>
+    <div class="overview-details" id="overview-details"></div>
+  </div>
+
+  <div id="readiness-row" class="readiness-row"></div>
+
+  <div id="grid-view" style="display:none;">
+    <div id="grid-toolbar" class="grid-toolbar">
+      <span id="reveal-all" class="toolbar-link">＋ Reveal all</span>
+      <span id="collapse-all" class="toolbar-link">－ Collapse all</span>
+    </div>
+    <div id="donut-grid" class="donut-grid"></div>
+  </div>
+
+  <div id="expanded-view" class="expanded-view">
+    <button id="back-btn" class="back-btn">← Back to all tracks</button>
+    <div class="exp-card">
+      <div id="exp-header" class="exp-header"></div>
+      <div class="exp-top">
+        <div class="exp-donut-wrap">
+          <canvas id="exp-donut"></canvas>
+        </div>
+        <div id="exp-kpis" class="exp-kpis"></div>
+      </div>
+      <div>
+        <div class="section-label">Task details</div>
+        <div id="exp-tasks"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const COLOR_DONE = '#2E7D32';
+  const COLOR_IP   = '#F4C430';
+  const COLOR_NS   = '#9DC3E6';
+  const STATUS_STYLES = {
+    'Completed':   { bg: '#E8F5E9', fg: '#1B5E20', dot: COLOR_DONE },
+    'In Progress': { bg: '#FFF8E1', fg: '#7A5A00', dot: COLOR_IP },
+    'Not Started': { bg: '#E6F1FB', fg: '#0C447C', dot: COLOR_NS }
+  };
+  const COL_WORKSTREAM=0, COL_TRACKIDX=1, COL_NAME=2, COL_IPAI=3, COL_OWNER=4, COL_ECD=6, COL_STATUS=7;
+
+  let tracks = [];
+  let expandedChart = null;
+
+  // Center-text plugin for donuts
+  const centerTextPlugin = {
+    id: 'centerText',
+    afterDraw(chart) {
+      const opts = chart.config.options.plugins.centerText;
+      if (!opts) return;
+      const { ctx, chartArea } = chart;
+      const cx = (chartArea.left + chartArea.right) / 2;
+      const cy = (chartArea.top + chartArea.bottom) / 2;
+      const numColor   = opts.numColor   || '#042C53';
+      const labelColor = opts.labelColor || '#6B7280';
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = numColor;
+      ctx.font = `600 ${opts.size}px -apple-system, BlinkMacSystemFont, system-ui, sans-serif`;
+      ctx.fillText(String(opts.total), cx, cy - (opts.size > 26 ? 10 : 6));
+      ctx.fillStyle = labelColor;
+      ctx.font = `400 ${opts.size > 26 ? 12 : 10}px -apple-system, BlinkMacSystemFont, system-ui, sans-serif`;
+      ctx.fillText('TOTAL', cx, cy + (opts.size > 26 ? 16 : 12));
+      ctx.restore();
+    }
+  };
+
+  // Upload handling
+  const uploadZone = document.getElementById('upload-zone');
+  const fileInput  = document.getElementById('file-input');
+  const browseBtn  = document.getElementById('browse-btn');
+  const reloadBtn  = document.getElementById('reload-btn');
+  const uploadMsg  = document.getElementById('upload-msg');
+
+  browseBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+  reloadBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+
+  ['dragover','dragenter'].forEach(ev => uploadZone.addEventListener(ev, (e) => {
+    e.preventDefault(); uploadZone.classList.add('dragover');
+  }));
+  ['dragleave','drop'].forEach(ev => uploadZone.addEventListener(ev, (e) => {
+    e.preventDefault(); uploadZone.classList.remove('dragover');
+  }));
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+
+  function setMsg(text, kind){
+    uploadMsg.textContent = text;
+    uploadMsg.className = 'upload-msg' + (kind ? ' ' + kind : '');
+  }
+
+  function handleFile(file){
+    setMsg(`Reading ${file.name}…`, '');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        const parsed = parseWorkbook(wb);
+        if (!parsed.length) { setMsg('No tracks detected. Check the sheet name and S.No column (column A).', 'err'); return; }
+        tracks = parsed;
+        const total = parsed.reduce((s,t)=>s+t.total,0);
+        setMsg(`Loaded ${parsed.length} tracks · ${total} total tasks`, 'ok');
+        document.getElementById('header-status').textContent = `${file.name} · ${parsed.length} tracks · ${total} tasks`;
+        reloadBtn.style.display = 'inline-block';
+        renderDashboard();
+      } catch (err) {
+        console.error(err);
+        setMsg('Could not read file. Make sure it is a valid Excel (.xlsx / .xls) file.', 'err');
+      }
+    };
+    reader.onerror = () => setMsg('Failed to read file.', 'err');
+    reader.readAsArrayBuffer(file);
+  }
+
+  function normalizeStatus(s){
+    if (s == null) return 'Not Started';
+    const str = String(s).trim().toLowerCase();
+    if (str === '') return 'Not Started';
+    if (str.includes('complet')) return 'Completed';
+    if (str.includes('progress')) return 'In Progress';
+    return 'Not Started';
+  }
+  function cellVal(row, idx){
+    const v = row[idx];
+    return (v != null && String(v).trim() !== '') ? String(v).trim() : '—';
+  }
+
+  function formatEcd(val){
+    if (val == null) return null;
+    if (val instanceof Date && !isNaN(val)) {
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${String(val.getDate()).padStart(2,'0')} ${months[val.getMonth()]} ${val.getFullYear()}`;
+    }
+    const s = String(val).trim();
+    return s === '' ? null : s;
+  }
+
+  function parseWorkbook(wb){
+    const sheetName = wb.SheetNames.find(n => n.toLowerCase() === 'program') || wb.SheetNames[0];
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+
+    // Step 1: Find track header rows; forward-fill workstream from column A
+    const trackHeaders = [];
+    let currentWs = null;
+    rows.forEach((row, i) => {
+      const wsVal = row[COL_WORKSTREAM];
+      if (wsVal != null && String(wsVal).trim() !== '') {
+        currentWs = String(wsVal).trim().replace(/\s+/g, ' ');
+      }
+      const tIdx = row[COL_TRACKIDX];
+      if (typeof tIdx === 'number' && Number.isInteger(tIdx) && tIdx > 0 && tIdx < 100) {
+        trackHeaders.push({
+          workstream: currentWs,
+          displayIdx: tIdx,
+          name: String(row[COL_NAME] || '').trim(),
+          startIdx: i,
+          headerEcd: formatEcd(row[COL_ECD])
+        });
+      }
+    });
+    for (let k = 0; k < trackHeaders.length; k++) {
+      trackHeaders[k].endIdx = k+1 < trackHeaders.length ? trackHeaders[k+1].startIdx - 1 : rows.length - 1;
+    }
+
+    // Step 2: Walk tasks under each track header; pull IP+AI tasks aside
+    const ipAiTasks = [];
+    let ipAiCompleted = 0, ipAiInProgress = 0, ipAiNotStarted = 0;
+
+    trackHeaders.forEach(th => {
+      let completed = 0, inProgress = 0, notStarted = 0;
+      const tasks = [];
+      for (let r = th.startIdx + 1; r <= th.endIdx; r++) {
+        const row = rows[r] || [];
+        const taskName = row[COL_NAME];
+        if (taskName == null || String(taskName).trim() === '') continue;
+        const status = normalizeStatus(row[COL_STATUS]);
+        const taskEcd = formatEcd(row[COL_ECD]);
+        const ecd = taskEcd != null ? taskEcd : (th.headerEcd != null ? th.headerEcd : '—');
+        const taskObj = {
+          name: String(taskName).trim(),
+          status,
+          ecd,
+          owner: cellVal(row, COL_OWNER)
+        };
+        const ipaiVal = row[COL_IPAI];
+        const isIpAi = ipaiVal != null && String(ipaiVal).toLowerCase().includes('ip+ai');
+        if (isIpAi) {
+          if (status === 'Completed') ipAiCompleted++;
+          else if (status === 'In Progress') ipAiInProgress++;
+          else ipAiNotStarted++;
+          ipAiTasks.push({ ...taskObj, sourceTrack: `${th.workstream || 'Other'} — ${th.name}` });
+        } else {
+          if (status === 'Completed') completed++;
+          else if (status === 'In Progress') inProgress++;
+          else notStarted++;
+          tasks.push(taskObj);
+        }
+      }
+      th.completed = completed;
+      th.inProgress = inProgress;
+      th.notStarted = notStarted;
+      th.total = completed + inProgress + notStarted;
+      th.tasks = tasks;
+    });
+
+    // Step 3: Build flat tracks list with unique ids; preserve workstream order from file
+    const tracks = [];
+    let nextId = 0;
+    trackHeaders.forEach(th => {
+      tracks.push({
+        id: nextId++,
+        wsName: th.workstream || 'Other',
+        displayIdx: th.displayIdx,
+        name: th.name,
+        headerEcd: th.headerEcd,
+        completed: th.completed,
+        inProgress: th.inProgress,
+        notStarted: th.notStarted,
+        total: th.total,
+        tasks: th.tasks
+      });
+    });
+
+    // Step 4: Append the synthetic IP+Innovation+AI Workflows workstream as the last entry
+    if (ipAiTasks.length > 0) {
+      tracks.push({
+        id: nextId++,
+        wsName: 'IP+Innovation+AI Workflows',
+        displayIdx: 1,
+        name: 'IP+AI Product Activities',
+        headerEcd: null,
+        completed: ipAiCompleted,
+        inProgress: ipAiInProgress,
+        notStarted: ipAiNotStarted,
+        total: ipAiTasks.length,
+        tasks: ipAiTasks,
+        isIpAi: true
+      });
+    }
+    return tracks;
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  let overviewChart = null;
+
+  function renderDashboard(){
+    document.getElementById('grid-view').style.display = 'block';
+    document.getElementById('expanded-view').style.display = 'none';
+
+    const tot  = tracks.reduce((s,t) => s + t.total, 0);
+    const done = tracks.reduce((s,t) => s + t.completed, 0);
+    const ip   = tracks.reduce((s,t) => s + t.inProgress, 0);
+    const ns   = tracks.reduce((s,t) => s + t.notStarted, 0);
+    const pct  = (n) => tot ? Math.round(n/tot*100) : 0;
+    const pctDone = pct(done), pctIp = pct(ip), pctNs = pct(ns);
+
+    // Hero banner: percent + breakdown line
+    const card = document.getElementById('overview-card');
+    card.classList.add('visible');
+    document.getElementById('overview-pct-num').textContent = `${pctDone}%`;
+    document.getElementById('overview-subline').textContent =
+      `${done} done · ${ip} in progress · ${ns} not started · ${tot} total`;
+
+    if (overviewChart) { overviewChart.destroy(); overviewChart = null; }
+    const ovCtx = document.getElementById('overview-donut').getContext('2d');
+    overviewChart = new Chart(ovCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Completed', 'In progress', 'Not started'],
+        datasets: [{
+          data: [done, ip, ns],
+          backgroundColor: [COLOR_DONE, COLOR_IP, COLOR_NS],
+          borderColor: '#ffffff',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '65%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: { label: (c) => `${c.label}: ${c.parsed} (${tot ? Math.round(c.parsed/tot*100) : 0}%)` }
+          },
+          centerText: { total: tot, size: 22, numColor: '#ffffff', labelColor: 'rgba(255,255,255,0.75)' }
+        }
+      },
+      plugins: [centerTextPlugin]
+    });
+
+    // Build drill-down content: all tasks grouped by status (Completed → In Progress → Not Started)
+    populateOverviewDetails();
+    populateReadinessRow();
+    // Reset to collapsed each render
+    document.getElementById('overview-card').classList.remove('expanded');
+    document.getElementById('overview-summary').setAttribute('aria-expanded', 'false');
+
+    const grid = document.getElementById('donut-grid');
+    grid.innerHTML = '';
+    document.getElementById('grid-toolbar').classList.add('visible');
+
+    // Group tracks by workstream in file order
+    const wsOrder = [];
+    const wsMap = new Map();
+    tracks.forEach(t => {
+      if (!wsMap.has(t.wsName)) {
+        wsMap.set(t.wsName, { name: t.wsName, tracks: [], completed: 0, inProgress: 0, notStarted: 0, total: 0 });
+        wsOrder.push(t.wsName);
+      }
+      const ws = wsMap.get(t.wsName);
+      ws.tracks.push(t);
+      ws.completed += t.completed;
+      ws.inProgress += t.inProgress;
+      ws.notStarted += t.notStarted;
+      ws.total += t.total;
+    });
+
+    wsOrder.forEach(name => {
+      const ws = wsMap.get(name);
+      renderWorkstreamSection(grid, ws.name, ws.tracks);
+    });
+  }
+
+  function renderWorkstreamSection(container, wsName, wsTracks) {
+    const wsTotal = wsTracks.reduce((s, t) => s + t.total, 0);
+    const wsDone  = wsTracks.reduce((s, t) => s + t.completed, 0);
+    const wsIp    = wsTracks.reduce((s, t) => s + t.inProgress, 0);
+    const wsNs    = wsTracks.reduce((s, t) => s + t.notStarted, 0);
+    const wsPct   = wsTotal ? Math.round(wsDone / wsTotal * 100) : 0;
+
+    const section = document.createElement('div');
+    section.className = 'workstream';
+    section.innerHTML = `
+      <div class="workstream-header" role="button" tabindex="0" aria-expanded="false">
+        <div class="workstream-header-left">
+          <span class="workstream-toggle" aria-hidden="true">▸</span>
+          <div>
+            <div class="workstream-label">Workstream</div>
+            <div class="workstream-name">${escapeHtml(wsName)}</div>
+          </div>
+        </div>
+        <div class="workstream-stats">
+          <span class="ws-stat">${wsTotal} tasks</span>
+          <span class="ws-stat"><span class="ws-stat-dot" style="background:#2E7D32;"></span>${wsDone}</span>
+          <span class="ws-stat"><span class="ws-stat-dot" style="background:#F4C430;"></span>${wsIp}</span>
+          <span class="ws-stat"><span class="ws-stat-dot" style="background:#9DC3E6;"></span>${wsNs}</span>
+          <span class="ws-stat ws-stat-pct" data-pct="${wsPct}" style="--pct:${wsPct}%; background: linear-gradient(to right, #2E7D32 ${wsPct}%, #EEF1F5 ${wsPct}%); color: ${wsPct >= 55 ? '#ffffff' : 'var(--navy)'};">${wsPct}% complete</span>
+        </div>
+      </div>
+      <div class="workstream-tracks"></div>
+    `;
+    container.appendChild(section);
+    const tracksContainer = section.querySelector('.workstream-tracks');
+    const header = section.querySelector('.workstream-header');
+
+    let chartsRendered = false;
+    function buildTrackCards() {
+      if (chartsRendered) return;
+      chartsRendered = true;
+      wsTracks.forEach((t) => {
+        const pctDone = t.total ? Math.round((t.completed / t.total) * 100) : 0;
+        const card = document.createElement('div');
+        card.className = 'track-card';
+        card.onclick = () => openExpanded(t.id);
+        const safeName = escapeHtml(t.name);
+        const displayName = t.name.length > 60 ? escapeHtml(t.name.slice(0,58)+'…') : safeName;
+        card.innerHTML = `
+          <div class="track-arrow">↗</div>
+          <div class="track-label">TRACK ${t.displayIdx}</div>
+          <div class="track-name" title="${safeName}">${displayName}</div>
+          <div class="donut-wrap"><canvas role="img" aria-label="${safeName}"></canvas></div>
+          <div class="track-footer">
+            <span class="track-footer-counts">${t.completed} · ${t.inProgress} · ${t.notStarted}</span>
+            <span class="track-footer-pct">${pctDone}%</span>
+          </div>
+        `;
+        tracksContainer.appendChild(card);
+
+        const ctx = card.querySelector('canvas').getContext('2d');
+        new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Completed','In progress','Not started'],
+            datasets: [{
+              data: [t.completed, t.inProgress, t.notStarted],
+              backgroundColor: [COLOR_DONE, COLOR_IP, COLOR_NS],
+              borderColor: '#ffffff',
+              borderWidth: 1.5
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: { label: (c) => `${c.label}: ${c.parsed} (${t.total ? Math.round(c.parsed/t.total*100) : 0}%)` }
+              },
+              centerText: { total: t.total, size: 22 }
+            }
+          },
+          plugins: [centerTextPlugin]
+        });
+      });
+    }
+
+    function toggle(forceState){
+      const willExpand = forceState != null ? forceState : !section.classList.contains('expanded');
+      if (willExpand) {
+        buildTrackCards();
+        section.classList.add('expanded');
+        header.setAttribute('aria-expanded', 'true');
+      } else {
+        section.classList.remove('expanded');
+        header.setAttribute('aria-expanded', 'false');
+      }
+    }
+    function userToggle(){
+      const wasExpanded = section.classList.contains('expanded');
+      // Accordion: clicking a collapsed header closes any other open one first
+      if (!wasExpanded) {
+        document.querySelectorAll('#donut-grid .workstream.expanded').forEach(el => {
+          if (el !== section && el._toggle) el._toggle(false);
+        });
+      }
+      toggle();
+    }
+    header.addEventListener('click', userToggle);
+    header.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); userToggle(); }
+    });
+    // Expose toggle so toolbar links can drive expand/collapse all
+    section._toggle = toggle;
+  }
+
+  function populateOverviewDetails() {
+    // Collect all tasks from all tracks (including the synthetic IP+AI workstream),
+    // attaching their workstream + track context.
+    const allTasks = [];
+    tracks.forEach(t => {
+      t.tasks.forEach(tk => {
+        allTasks.push({
+          name: tk.name,
+          status: tk.status,
+          ecd: tk.ecd,
+          owner: tk.owner,
+          wsName: t.wsName,
+          trackName: t.name,
+          trackDisplayIdx: t.displayIdx
+        });
+      });
+    });
+
+    const groups = [
+      {
+        status: 'Completed',
+        label: 'Completed',
+        dot: '#2E7D32',
+        bg: '#E8F5E9',
+        fg: '#1B5E20',
+        icon: '✓'
+      },
+      {
+        status: 'In Progress',
+        label: 'In Progress',
+        dot: '#F4C430',
+        bg: '#FFF8E1',
+        fg: '#7A5A00',
+        icon: '◐'
+      },
+      {
+        status: 'Not Started',
+        label: 'Not Started',
+        dot: '#9DC3E6',
+        bg: '#E6F1FB',
+        fg: '#0C447C',
+        icon: '○'
+      }
+    ];
+
+    const html = groups.map(g => {
+      const items = allTasks.filter(tk => tk.status === g.status);
+      if (items.length === 0) {
+        return `
+          <div class="task-group">
+            <div class="task-group-header" style="background:${g.bg}; color:${g.fg};">
+              <span class="task-group-dot" style="background:${g.dot};"></span>
+              <span>${g.icon} ${g.label}</span>
+              <span class="task-group-count">0</span>
+            </div>
+            <div class="task-group-list" style="padding: 14px; text-align: center; font-size: 12px; color: var(--text-secondary);">
+              No ${g.label.toLowerCase()} tasks.
+            </div>
+          </div>
+        `;
+      }
+      return `
+        <div class="task-group">
+          <div class="task-group-header" style="background:${g.bg}; color:${g.fg};">
+            <span class="task-group-dot" style="background:${g.dot};"></span>
+            <span>${g.icon} ${g.label}</span>
+            <span class="task-group-count">${items.length}</span>
+          </div>
+          <div class="task-group-list">
+            <div class="task-list-header">
+              <div>Task · Workstream › Track</div>
+              <div>ECD</div>
+              <div>Owner</div>
+            </div>
+            ${items.map(tk => `
+              <div class="task-list-row">
+                <div>
+                  <div class="task-list-name">${escapeHtml(tk.name)}</div>
+                  <div class="task-list-context">${escapeHtml(tk.wsName)} › Track ${tk.trackDisplayIdx} · ${escapeHtml(tk.trackName)}</div>
+                </div>
+                <div class="task-list-meta">${escapeHtml(tk.ecd)}</div>
+                <div class="task-list-meta">${escapeHtml(tk.owner)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('overview-details').innerHTML = html;
+  }
+
+  // 3 aggregated readiness metric cards under the overview (fixed RAG color per pillar)
+  function populateReadinessRow() {
+    const pillars = [
+      {
+        title: 'Curriculum Design, Content Readiness',
+        rag: 'green',
+        keywords: ['curriculum design and learning content']
+      },
+      {
+        title: 'Program Delivery / Operational Readiness',
+        rag: 'green',
+        keywords: [
+          'student onboarding',
+          'faculty onboarding',
+          'student intake',
+          'academic operations',
+          'infrastructure',
+          'regulatory',
+          'student development',
+          'student success'
+        ]
+      },
+      {
+        title: 'Industry Integration Readiness',
+        rag: 'amber',
+        keywords: ['placement support', 'industry integration']
+      }
+    ];
+
+    const results = pillars.map(p => {
+      const matched = tracks.filter(t => {
+        const wsLower = String(t.wsName || '').toLowerCase();
+        return p.keywords.some(k => wsLower.includes(k));
+      });
+      const done  = matched.reduce((s, t) => s + t.completed, 0);
+      const ip    = matched.reduce((s, t) => s + t.inProgress, 0);
+      const ns    = matched.reduce((s, t) => s + t.notStarted, 0);
+      const total = done + ip + ns;
+      const pct   = total ? Math.round(done / total * 100) : 0;
+      return { ...p, done, ip, ns, total, pct };
+    });
+
+    const row = document.getElementById('readiness-row');
+    row.classList.add('visible');
+    row.innerHTML = results.map(r => `
+      <div class="readiness-card rag-${r.rag}">
+        <div class="readiness-title">${escapeHtml(r.title)}</div>
+        <div class="readiness-pct">${r.pct}%</div>
+        <div class="readiness-bar-track">
+          <div class="readiness-bar-fill" style="width: ${r.pct}%;"></div>
+        </div>
+        <div class="readiness-meta">${r.done} of ${r.total} complete · ${r.ip} WIP</div>
+      </div>
+    `).join('');
+  }
+
+  function openExpanded(id){
+    const t = tracks.find(x => x.id === id);
+    if (!t) return;
+    const pctDone = t.total ? Math.round((t.completed / t.total) * 100) : 0;
+    const pctIp   = t.total ? Math.round((t.inProgress / t.total) * 100) : 0;
+    const pctNs   = t.total ? Math.round((t.notStarted / t.total) * 100) : 0;
+
+    document.getElementById('exp-header').innerHTML = `
+      <div class="exp-header-label">${escapeHtml(t.wsName)} · TRACK ${t.displayIdx}</div>
+      <div class="exp-header-title">${escapeHtml(t.name)}</div>
+      <div class="exp-header-sub">${t.total} tasks · ${pctDone}% complete</div>
+    `;
+
+    document.getElementById('exp-kpis').innerHTML = `
+      <div class="exp-kpi" style="background:#E8F5E9;">
+        <div class="exp-kpi-label" style="color:#1B5E20;">COMPLETED</div>
+        <div class="exp-kpi-value" style="color:#1B5E20;">${t.completed}<span class="kpi-pct">${pctDone}%</span></div>
+      </div>
+      <div class="exp-kpi" style="background:#FFF8E1;">
+        <div class="exp-kpi-label" style="color:#7A5A00;">IN PROGRESS</div>
+        <div class="exp-kpi-value" style="color:#7A5A00;">${t.inProgress}<span class="kpi-pct">${pctIp}%</span></div>
+      </div>
+      <div class="exp-kpi" style="background:#E6F1FB;">
+        <div class="exp-kpi-label" style="color:#0C447C;">NOT STARTED</div>
+        <div class="exp-kpi-value" style="color:#0C447C;">${t.notStarted}<span class="kpi-pct">${pctNs}%</span></div>
+      </div>
+      <div class="exp-kpi" style="background:#F3F4F6;">
+        <div class="exp-kpi-label" style="color:#6B7280;">TOTAL TASKS</div>
+        <div class="exp-kpi-value">${t.total}</div>
+      </div>
+    `;
+
+    const tasksEl = document.getElementById('exp-tasks');
+    if (t.tasks.length) {
+      tasksEl.innerHTML = `
+        <div class="task-table">
+          <div class="task-row header"><div>TASK</div><div>STATUS</div><div>ECD</div><div>OWNER</div></div>
+          ${t.tasks.map((tk) => {
+            const s = STATUS_STYLES[tk.status];
+            const sourceLine = (t.isIpAi && tk.sourceTrack) ?
+              `<div class="text-muted" style="font-size:11px; margin-top:3px;">From ${escapeHtml(tk.sourceTrack)}</div>` : '';
+            return `
+              <div class="task-row">
+                <div>
+                  ${escapeHtml(tk.name)}
+                  ${sourceLine}
+                </div>
+                <div>
+                  <span class="status-pill" style="background:${s.bg}; color:${s.fg};">
+                    <span class="status-dot" style="background:${s.dot};"></span>${tk.status}
+                  </span>
+                </div>
+                <div class="text-muted">${escapeHtml(tk.ecd)}</div>
+                <div class="text-muted">${escapeHtml(tk.owner)}</div>
+              </div>`;
+          }).join('')}
+        </div>
+      `;
+    } else {
+      tasksEl.innerHTML = `<div style="padding:24px; text-align:center; color:var(--text-secondary); font-size:13px;">No tasks found under this track.</div>`;
+    }
+
+    if (expandedChart) { expandedChart.destroy(); expandedChart = null; }
+    const ctx = document.getElementById('exp-donut').getContext('2d');
+    expandedChart = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Completed','In progress','Not started'],
+        datasets: [{
+          data: [t.completed, t.inProgress, t.notStarted],
+          backgroundColor: [COLOR_DONE, COLOR_IP, COLOR_NS],
+          borderColor: '#ffffff',
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '62%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => `${c.label}: ${c.parsed} (${t.total ? Math.round(c.parsed/t.total*100) : 0}%)` } },
+          centerText: { total: t.total, size: 32 }
+        }
+      },
+      plugins: [centerTextPlugin]
+    });
+
+    document.getElementById('grid-view').style.display = 'none';
+    const expView = document.getElementById('expanded-view');
+    expView.style.display = 'block';
+    // Scroll so the expanded section starts at the top of the viewport
+    requestAnimationFrame(() => {
+      expView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
+  document.getElementById('back-btn').onclick = () => {
+    document.getElementById('expanded-view').style.display = 'none';
+    document.getElementById('grid-view').style.display = 'block';
+    if (expandedChart) { expandedChart.destroy(); expandedChart = null; }
+  };
+
+  // Overview summary: click to toggle the all-tasks drill-down panel
+  const ovSummary = document.getElementById('overview-summary');
+  function toggleOverview(){
+    const card = document.getElementById('overview-card');
+    const willExpand = !card.classList.contains('expanded');
+    card.classList.toggle('expanded', willExpand);
+    ovSummary.setAttribute('aria-expanded', willExpand ? 'true' : 'false');
+  }
+  ovSummary.addEventListener('click', toggleOverview);
+  ovSummary.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOverview(); }
+  });
+
+  document.getElementById('reveal-all').onclick = () => {
+    document.querySelectorAll('#donut-grid .workstream').forEach(el => {
+      if (el._toggle) el._toggle(true);
+    });
+  };
+  document.getElementById('collapse-all').onclick = () => {
+    document.querySelectorAll('#donut-grid .workstream').forEach(el => {
+      if (el._toggle) el._toggle(false);
+    });
+  };
+})();
+</script>
+</body>
+</html>
