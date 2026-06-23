@@ -60,49 +60,21 @@
   .header h1 { margin: 0; font-size: 18px; font-weight: 600; line-height: 1.25; color: #ffffff; }
   .header h1 .accent { color: #378ADD; font-weight: 700; }
   .header p  { margin: 4px 0 0; font-size: 12px; color: rgba(255,255,255,0.85); }
-  .header-status { font-size: 12px; color: rgba(255,255,255,0.75); }
-
-
-  .btn {
-    padding: 6px 14px;
-    font-size: 12px;
-    cursor: pointer;
-    background: var(--navy);
-    color: #fff;
+  .header-browse-btn {
+    background: #ffffff;
+    color: var(--navy);
     border: none;
-    border-radius: var(--radius-sm);
-    font-family: inherit;
-  }
-  .btn:hover { background: var(--navy-2); }
-  .btn-secondary {
-    background: transparent;
-    color: var(--text);
-    border: 1px solid var(--border-strong);
-    padding: 6px 12px;
+    border-radius: 6px;
+    padding: 7px 16px;
     font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
-    border-radius: var(--radius-sm);
     font-family: inherit;
+    flex-shrink: 0;
+    transition: background 0.15s ease, transform 0.1s ease;
   }
-  .btn-secondary:hover { background: var(--bg-secondary); }
-  .upload-zone {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 8px 14px;
-    margin-bottom: 14px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-  .upload-actions { display: flex; gap: 6px; align-items: center; }
-  .upload-msg { font-size: 12px; color: var(--text-secondary); margin: 0; flex: 1; min-width: 200px; }
-  .upload-msg.ok  { color: var(--green-fg); font-weight: 500; }
-  .upload-msg.err { color: #B00020; }
-  details { font-size: 11px; color: var(--text-secondary); flex-basis: 100%; }
-  details summary { cursor: pointer; }
-  details > div { padding: 6px 0 0; line-height: 1.5; max-width: 720px; }
+  .header-browse-btn:hover { background: #EEF1F5; }
+  .header-browse-btn:active { transform: translateY(1px); }
 
   .legend {
     display: none;
@@ -614,22 +586,8 @@
       <h1><span class="accent">USTU</span> MBA in Collaboration with <span class="accent">KPMG</span> in India</h1>
       <p>MIS Review Dashboard</p>
     </div>
-    <div id="header-status" class="header-status">No data loaded</div>
-  </div>
-
-  <div id="upload-zone" class="upload-zone">
     <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none;">
-    <div class="upload-actions">
-      <button id="browse-btn" class="btn">Browse</button>
-      <button id="reload-btn" class="btn btn-secondary" style="display:none;">Replace file</button>
-    </div>
-    <div id="upload-msg" class="upload-msg"></div>
-    <details>
-      <summary>Expected file structure</summary>
-      <div>
-        Sheet named <strong>Program</strong>. <strong>Column A</strong> = Workstream name (set on first track row of each workstream; carries forward). <strong>Column B</strong> = Track index within workstream. <strong>Column C</strong> = Track / Task name. <strong>Column D</strong> = IP+AI Product flag (becomes 11th workstream). <strong>Column E</strong> = Responsibility / Owner. <strong>Column G</strong> = ECD (date). <strong>Column H</strong> = Status (Completed / In Progress / blank = Not Started). Tasks inherit ECD from their track header when their own ECD cell is blank.
-      </div>
-    </details>
+    <button id="browse-btn" class="header-browse-btn">Browse</button>
   </div>
 
   <div id="overview-card" class="overview-card">
@@ -750,48 +708,34 @@
   };
 
   // Upload handling
-  const uploadZone = document.getElementById('upload-zone');
   const fileInput  = document.getElementById('file-input');
   const browseBtn  = document.getElementById('browse-btn');
-  const reloadBtn  = document.getElementById('reload-btn');
-  const uploadMsg  = document.getElementById('upload-msg');
 
   browseBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
-  reloadBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
 
-  ['dragover','dragenter'].forEach(ev => uploadZone.addEventListener(ev, (e) => {
-    e.preventDefault(); uploadZone.classList.add('dragover');
-  }));
-  ['dragleave','drop'].forEach(ev => uploadZone.addEventListener(ev, (e) => {
-    e.preventDefault(); uploadZone.classList.remove('dragover');
-  }));
-  uploadZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-  });
   fileInput.addEventListener('change', (e) => {
     if (e.target.files.length) handleFile(e.target.files[0]);
   });
 
+  // Lightweight notifier: logs to console; surfaces errors via alert so the user notices
   function setMsg(text, kind){
-    uploadMsg.textContent = text;
-    uploadMsg.className = 'upload-msg' + (kind ? ' ' + kind : '');
+    if (kind === 'err') {
+      console.error(text);
+      alert(text);
+    } else {
+      console.log(text);
+    }
   }
 
   function handleFile(file){
-    setMsg(`Reading ${file.name}…`, '');
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
         const wb = XLSX.read(data, { type: 'array', cellDates: true });
         const parsed = parseWorkbook(wb);
-        if (!parsed.length) { setMsg('No tracks detected. Check the sheet name and S.No column (column A).', 'err'); return; }
+        if (!parsed.length) { setMsg('No tracks detected. Check the sheet name and column structure.', 'err'); return; }
         tracks = parsed;
-        const total = parsed.reduce((s,t)=>s+t.total,0);
-        setMsg(`Loaded ${parsed.length} tracks · ${total} total tasks`, 'ok');
-        document.getElementById('header-status').textContent = `${file.name} · ${parsed.length} tracks · ${total} tasks`;
-        reloadBtn.style.display = 'inline-block';
         renderDashboard();
       } catch (err) {
         console.error(err);
@@ -805,7 +749,6 @@
   // Auto-load the Excel file sitting next to this HTML (for GitHub Pages deployment)
   async function autoLoadFromSameFolder(){
     const filename = 'Program_Execution_Plan.xlsx';
-    setMsg(`Loading ${filename}…`, '');
     try {
       const res = await fetch(filename, { cache: 'no-cache' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -818,16 +761,11 @@
         return;
       }
       tracks = parsed;
-      const total = parsed.reduce((s,t)=>s+t.total,0);
-      setMsg(`Loaded ${parsed.length} tracks · ${total} total tasks (auto-loaded)`, 'ok');
-      document.getElementById('header-status').textContent = `${filename} · ${parsed.length} tracks · ${total} tasks`;
-      reloadBtn.style.display = 'inline-block';
       renderDashboard();
     } catch (err) {
-      // Auto-load failed — fall back silently to manual browse. Most common reasons:
+      // Auto-load failed — viewer can fall back to manual Browse. Common reasons:
       // (a) file:// double-click (CORS blocks fetch), (b) file not yet committed to repo.
       console.warn('Auto-load failed:', err);
-      setMsg('Click Browse to load your tracker file.', '');
     }
   }
   // Kick off auto-load after script setup completes
