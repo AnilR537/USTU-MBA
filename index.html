@@ -1260,16 +1260,18 @@
 
   // 3 aggregated readiness metric cards under the overview (fixed RAG color per pillar)
   function populateReadinessRow() {
+    // Pillars match by workstream name OR (optionally) by track name
     const pillars = [
       {
         title: 'Curriculum Design, Content Readiness',
         rag: 'green',
-        keywords: ['curriculum design and learning content']
+        wsKeywords: ['curriculum design and learning content'],
+        trackKeywords: []
       },
       {
         title: 'Program Delivery / Operational Readiness',
         rag: 'green',
-        keywords: [
+        wsKeywords: [
           'student onboarding',
           'faculty onboarding',
           'student intake',
@@ -1278,19 +1280,25 @@
           'regulatory',
           'student development',
           'student success'
-        ]
+        ],
+        trackKeywords: []
       },
       {
         title: 'Industry Integration Readiness',
         rag: 'amber',
-        keywords: ['placement support', 'industry integration']
+        wsKeywords: ['placement support', 'industry integration'],
+        // OJT tracks are housed under Curriculum but also feed industry-readiness outcomes
+        trackKeywords: ['ojt']
       }
     ];
 
     const results = pillars.map(p => {
       const matched = tracks.filter(t => {
         const wsLower = String(t.wsName || '').toLowerCase();
-        return p.keywords.some(k => wsLower.includes(k));
+        const trackLower = String(t.name || '').toLowerCase();
+        const wsHit = p.wsKeywords.some(k => wsLower.includes(k));
+        const trackHit = p.trackKeywords.some(k => trackLower.includes(k));
+        return wsHit || trackHit;
       });
       const done  = matched.reduce((s, t) => s + t.completed, 0);
       const ip    = matched.reduce((s, t) => s + t.inProgress, 0);
