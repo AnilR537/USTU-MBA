@@ -64,9 +64,9 @@
     background: #ffffff;
     color: var(--navy);
     border: none;
-    border-radius: 6px;
-    padding: 7px 16px;
-    font-size: 12px;
+    border-radius: 5px;
+    padding: 5px 12px;
+    font-size: 11px;
     font-weight: 600;
     cursor: pointer;
     font-family: inherit;
@@ -254,12 +254,12 @@
     .task-list-row { grid-template-columns: 1fr; gap: 4px; }
   }
 
-  /* Three readiness pillar cards (RAG-themed by editorial assignment) */
+  /* Three readiness pillar cards (RAG-themed by editorial assignment) — clickable */
   .readiness-row {
     display: none;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
-    margin-bottom: 18px;
+    margin-bottom: 12px;
   }
   .readiness-row.visible { display: grid; }
   .readiness-card {
@@ -267,6 +267,14 @@
     padding: 14px 16px;
     background: #ffffff;
     border: 1px solid var(--border);
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .readiness-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
   }
   .readiness-card.rag-green {
     border: 1px solid #BBF7D0;
@@ -280,6 +288,35 @@
     border: 1px solid #FECACA;
     border-left: 4px solid #B91C1C;
   }
+  .readiness-card.expanded { box-shadow: 0 4px 16px rgba(0,0,0,0.10); }
+  /* Triangular caret pointing from expanded card down to the details panel */
+  .readiness-card.expanded::after {
+    content: '';
+    position: absolute;
+    bottom: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .rag-green.expanded::after { border-top: 12px solid #2E7D32; }
+  .rag-amber.expanded::after { border-top: 12px solid #B45309; }
+  .rag-red.expanded::after   { border-top: 12px solid #B91C1C; }
+  .readiness-chevron {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    font-size: 14px;
+    transition: transform 0.2s ease;
+  }
+  .rag-green .readiness-chevron { color: #2E7D32; }
+  .rag-amber .readiness-chevron { color: #B45309; }
+  .rag-red   .readiness-chevron { color: #B91C1C; }
+  .readiness-card.expanded .readiness-chevron { transform: rotate(90deg); }
   .readiness-title {
     font-size: 11px;
     color: var(--text-secondary);
@@ -287,6 +324,7 @@
     letter-spacing: 0.4px;
     text-transform: uppercase;
     line-height: 1.3;
+    padding-right: 22px;
   }
   .readiness-pct {
     font-size: 32px;
@@ -318,6 +356,42 @@
     color: var(--text-secondary);
     margin-top: 8px;
   }
+
+  /* Details panel that opens below the readiness row */
+  .readiness-details {
+    display: none;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 22px 20px;
+    margin-bottom: 18px;
+  }
+  .readiness-details.visible { display: block; }
+  .readiness-details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .readiness-details-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .readiness-details-close {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 6px;
+    line-height: 1;
+  }
+  .readiness-details-close:hover { color: var(--text); }
   @media (max-width: 900px) {
     .readiness-row.visible { grid-template-columns: 1fr; }
   }
@@ -607,6 +681,7 @@
   </div>
 
   <div id="readiness-row" class="readiness-row"></div>
+  <div id="readiness-details" class="readiness-details"></div>
 
   <div id="grid-view" style="display:none;">
     <div id="grid-toolbar" class="grid-toolbar">
@@ -1196,6 +1271,10 @@
     document.getElementById('overview-details').innerHTML = html;
   }
 
+  // Cache of matched tracks per pillar so drill-down can build task list quickly
+  let pillarResults = [];
+  let activePillarIdx = null;
+
   // 3 aggregated readiness metric cards under the overview (fixed RAG color per pillar)
   function populateReadinessRow() {
     // Pillars match by workstream name OR (optionally) by track name
@@ -1230,7 +1309,7 @@
       }
     ];
 
-    const results = pillars.map(p => {
+    pillarResults = pillars.map(p => {
       const matched = tracks.filter(t => {
         const wsLower = String(t.wsName || '').toLowerCase();
         const trackLower = String(t.name || '').toLowerCase();
@@ -1243,13 +1322,14 @@
       const ns    = matched.reduce((s, t) => s + t.notStarted, 0);
       const total = done + ip + ns;
       const pct   = total ? Math.round(done / total * 100) : 0;
-      return { ...p, done, ip, ns, total, pct };
+      return { ...p, matched, done, ip, ns, total, pct };
     });
 
     const row = document.getElementById('readiness-row');
     row.classList.add('visible');
-    row.innerHTML = results.map(r => `
-      <div class="readiness-card rag-${r.rag}">
+    row.innerHTML = pillarResults.map((r, idx) => `
+      <div class="readiness-card rag-${r.rag}" data-pillar-idx="${idx}" role="button" tabindex="0" aria-expanded="false">
+        <span class="readiness-chevron" aria-hidden="true">▸</span>
         <div class="readiness-title">${escapeHtml(r.title)}</div>
         <div class="readiness-pct">${r.pct}%</div>
         <div class="readiness-bar-track">
@@ -1258,6 +1338,135 @@
         <div class="readiness-meta">${r.done} of ${r.total} complete · ${r.ip} WIP</div>
       </div>
     `).join('');
+
+    // Wire up click + keyboard handlers
+    row.querySelectorAll('.readiness-card').forEach(card => {
+      const idx = Number(card.dataset.pillarIdx);
+      const handler = () => togglePillar(idx);
+      card.addEventListener('click', handler);
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); }
+      });
+    });
+
+    // Collapse any open drill-down on a fresh render
+    closePillarDetails();
+  }
+
+  function togglePillar(idx) {
+    if (activePillarIdx === idx) {
+      closePillarDetails();
+    } else {
+      openPillarDetails(idx);
+    }
+  }
+
+  function closePillarDetails() {
+    activePillarIdx = null;
+    const details = document.getElementById('readiness-details');
+    details.classList.remove('visible');
+    details.innerHTML = '';
+    document.querySelectorAll('#readiness-row .readiness-card').forEach(c => {
+      c.classList.remove('expanded');
+      c.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  function openPillarDetails(idx) {
+    const pillar = pillarResults[idx];
+    if (!pillar) return;
+    activePillarIdx = idx;
+
+    // Highlight which card is expanded
+    document.querySelectorAll('#readiness-row .readiness-card').forEach(c => {
+      const i = Number(c.dataset.pillarIdx);
+      c.classList.toggle('expanded', i === idx);
+      c.setAttribute('aria-expanded', i === idx ? 'true' : 'false');
+    });
+
+    // Build task list grouped by status from this pillar's matched tracks
+    const allTasks = [];
+    pillar.matched.forEach(t => {
+      t.tasks.forEach(tk => {
+        allTasks.push({
+          name: tk.name,
+          status: tk.status,
+          ecd: tk.ecd,
+          owner: tk.owner,
+          wsName: t.wsName,
+          trackName: t.name,
+          trackDisplayIdx: t.displayIdx
+        });
+      });
+    });
+
+    const groups = [
+      { status: 'Completed',   label: 'Completed',   dot: '#2E7D32', bg: '#E8F5E9', fg: '#1B5E20', icon: '✓' },
+      { status: 'In Progress', label: 'In Progress', dot: '#F4C430', bg: '#FFF8E1', fg: '#7A5A00', icon: '◐' },
+      { status: 'Not Started', label: 'Not Started', dot: '#9DC3E6', bg: '#E6F1FB', fg: '#0C447C', icon: '○' }
+    ];
+
+    const ragHex = pillar.rag === 'green' ? '#2E7D32' : pillar.rag === 'amber' ? '#B45309' : '#B91C1C';
+
+    const groupsHtml = groups.map(g => {
+      const items = allTasks.filter(tk => tk.status === g.status);
+      if (items.length === 0) {
+        return `
+          <div class="task-group">
+            <div class="task-group-header" style="background:${g.bg}; color:${g.fg};">
+              <span class="task-group-dot" style="background:${g.dot};"></span>
+              <span>${g.icon} ${g.label}</span>
+              <span class="task-group-count">0</span>
+            </div>
+            <div class="task-group-list" style="padding:14px; text-align:center; font-size:12px; color:var(--text-secondary);">
+              No ${g.label.toLowerCase()} tasks.
+            </div>
+          </div>
+        `;
+      }
+      return `
+        <div class="task-group">
+          <div class="task-group-header" style="background:${g.bg}; color:${g.fg};">
+            <span class="task-group-dot" style="background:${g.dot};"></span>
+            <span>${g.icon} ${g.label}</span>
+            <span class="task-group-count">${items.length}</span>
+          </div>
+          <div class="task-group-list">
+            <div class="task-list-header">
+              <div>Task · Workstream › Track</div>
+              <div>ECD</div>
+              <div>Owner</div>
+            </div>
+            ${items.map(tk => `
+              <div class="task-list-row">
+                <div>
+                  <div class="task-list-name">${escapeHtml(tk.name)}</div>
+                  <div class="task-list-context">${escapeHtml(tk.wsName)} › Track ${tk.trackDisplayIdx} · ${escapeHtml(tk.trackName)}</div>
+                </div>
+                <div class="task-list-meta">${escapeHtml(tk.ecd)}</div>
+                <div class="task-list-meta">${escapeHtml(tk.owner)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const details = document.getElementById('readiness-details');
+    details.innerHTML = `
+      <div class="readiness-details-header" style="border-bottom-color:${ragHex};">
+        <div class="readiness-details-title" style="color:${ragHex};">${escapeHtml(pillar.title)} · ${pillar.pct}% complete</div>
+        <button class="readiness-details-close" aria-label="Close" title="Close">✕</button>
+      </div>
+      ${groupsHtml}
+    `;
+    details.classList.add('visible');
+    details.querySelector('.readiness-details-close').addEventListener('click', closePillarDetails);
+
+    // Scroll the details panel into view
+    requestAnimationFrame(() => {
+      details.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
   }
 
   function openExpanded(id){
